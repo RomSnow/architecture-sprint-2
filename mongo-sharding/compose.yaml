@@ -1,0 +1,98 @@
+name: "mongo-sharding"
+services:
+  mongodb_config_server:
+    container_name: mongodb_config_server
+    image: dh-mirror.gitverse.ru/mongo:latest
+    restart: always
+    volumes:
+      - config-data:/data/db
+    ports:
+      - "27017:27017"
+    command:
+      [
+        "--configsvr",
+        "--replSet",
+        "config_server",
+        "--bind_ip_all",
+        "--port",
+        "27017"
+      ]
+
+  mongodb_shard1-0:
+      container_name: mongodb_shard1-0
+      image: dh-mirror.gitverse.ru/mongo:latest
+      restart: always
+      volumes:
+        - shard1-0-data:/data/db
+      ports:
+        - "27019:27019"
+      command:
+        [
+          "--shardsvr",
+          "--replSet",
+          "shard1",
+          "--bind_ip_all",
+          "--port",
+          "27019"
+        ]
+
+  mongodb_shard2-0:
+      container_name: mongodb_shard2-0
+      image: dh-mirror.gitverse.ru/mongo:latest
+      restart: always
+      volumes:
+        - shard2-0-data:/data/db
+      ports:
+        - "27020:27020"
+      command:
+        [
+          "--shardsvr",
+          "--replSet",
+          "shard2",
+          "--bind_ip_all",
+          "--port",
+          "27020"
+        ]
+
+  mongodb_router:
+      container_name: mongodb_router
+      image: dh-mirror.gitverse.ru/mongo:latest
+      restart: always
+      volumes:
+        - router-data:/data/db
+      ports:
+        - "27018:27018"
+      depends_on:
+        - mongodb_config_server
+        - mongodb_shard1-0
+        - mongodb_shard2-0
+      command:
+        [
+          "mongos",
+          "--configdb", 
+          "config_server/mongodb_config_server:27017",
+          "--bind_ip_all",
+          "--port",
+          "27018"
+        ]
+
+  pymongo_api:
+    container_name: pymongo_api
+    build: 
+      context: api_app
+      dockerfile: Dockerfile
+    image: kazhem/pymongo_api:1.0.0
+    depends_on:
+      - mongodb_router
+    ports:
+      - 8080:8080
+    environment:
+      MONGODB_URL: "mongodb://mongodb_router:27018"
+      MONGODB_DATABASE_NAME: "somedb"
+
+
+volumes:
+  config-data:
+  router-data:
+  shard1-0-data:
+  shard2-0-data:
